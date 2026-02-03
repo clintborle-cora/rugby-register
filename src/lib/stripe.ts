@@ -9,7 +9,8 @@ function getStripe(): Stripe {
       throw new Error('STRIPE_SECRET_KEY is not set')
     }
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
+      // Cast to any to allow newer API version than types support
+      apiVersion: '2024-12-18.acacia' as Stripe.LatestApiVersion,
       typescript: true,
     })
   }
@@ -20,6 +21,7 @@ function getStripe(): Stripe {
 export { getStripe }
 
 // Helper to create a checkout session for registration payment
+// Supports Stripe Connect - money flows directly to the club's connected account
 export async function createCheckoutSession({
   registrationIds,
   clubName,
@@ -28,6 +30,7 @@ export async function createCheckoutSession({
   successUrl,
   cancelUrl,
   metadata,
+  stripeAccountId,
 }: {
   registrationIds: string[]
   clubName: string
@@ -36,8 +39,10 @@ export async function createCheckoutSession({
   successUrl: string
   cancelUrl: string
   metadata?: Record<string, string>
+  stripeAccountId?: string | null // Club's Stripe Connect account ID
 }) {
-  const session = await getStripe().checkout.sessions.create({
+  // Build session params
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
     payment_method_types: ['card'],
     line_items: [
       {
@@ -59,7 +64,22 @@ export async function createCheckoutSession({
       registration_ids: registrationIds.join(','),
       ...metadata,
     },
-  })
+  }
+
+  // If club has a connected Stripe account, use destination charges
+  // This sends the full payment to the connected account
+  // The platform can optionally take an application fee
+  if (stripeAccountId) {
+    sessionParams.payment_intent_data = {
+      transfer_data: {
+        destination: stripeAccountId,
+      },
+      // Optionally add platform fee here:
+      // application_fee_amount: platformFeeCents,
+    }
+  }
+
+  const session = await getStripe().checkout.sessions.create(sessionParams)
 
   return session
 }

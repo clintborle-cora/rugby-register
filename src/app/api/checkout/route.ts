@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
     const club = registrations[0].club
 
     // Create Stripe checkout session
+    // If club has a connected Stripe account, payments go directly to them
     const session = await createCheckoutSession({
       registrationIds,
       clubName: club.name,
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
         club_id: clubId,
         guardian_email: guardianEmail,
       },
+      stripeAccountId: club.stripe_account_id, // Stripe Connect destination
     })
 
     return NextResponse.json({ url: session.url })
