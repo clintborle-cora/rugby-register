@@ -1,62 +1,33 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { RegistrationWizard } from '@/components/forms/registration-wizard'
+import { createClient } from '@/lib/supabase/server'
+import { getUser, getGuardianByUserId } from '@/lib/actions/auth'
+import { getDraftRegistration } from '@/lib/actions/registration'
 import type { Club, Season, ClubSettings } from '@/types'
+import { User, LogIn } from 'lucide-react'
 
-// For now, we'll use mock data
-// In production, this would fetch from Supabase
 async function getClub(slug: string): Promise<Club | null> {
-  // Mock data for Stingrays
-  if (slug === 'stingrays') {
-    return {
-      id: '1',
-      name: 'SB Stingrays',
-      slug: 'stingrays',
-      logo_url: null,
-      primary_color: '#ef4444',
-      website_url: 'https://stingraysrfc.com',
-      contact_email: 'coach@stingraysrfc.com',
-      contact_phone: null,
-      city: 'Santa Barbara',
-      state: 'CA',
-      region: 'SoCal Youth Rugby',
-      settings: {
-        seasons: ['winter', 'spring', 'summer-7s'],
-        current_season: '2025-26-winter',
-        divisions: ['U8', 'U10', 'U12', 'U14'],
-        require_weight_verification: ['U10', 'U12'],
-        usa_rugby_fees: {
-          flag: 1600, // $16 for U8 flag
-          contact: 3000, // $30 for contact divisions
-        },
-        practice_location: 'UCSB West Campus Field',
-        practice_schedule: 'Tuesdays & Thursdays 5:30pm',
-      } as ClubSettings,
-      club_dues_cents: 25000, // $250
-      stripe_account_id: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-  }
-  return null
+  const supabase = await createClient()
+  const { data: club } = await supabase
+    .from('clubs')
+    .select('*')
+    .eq('slug', slug)
+    .single()
+
+  return club
 }
 
 async function getCurrentSeason(clubId: string): Promise<Season | null> {
-  // Mock data
-  return {
-    id: '1',
-    club_id: clubId,
-    slug: '2025-26-winter',
-    name: 'Winter 2025-26',
-    registration_opens: '2025-10-01T00:00:00Z',
-    registration_closes: '2026-01-15T00:00:00Z',
-    season_starts: '2026-01-10',
-    season_ends: '2026-03-07',
-    club_dues_cents: null,
-    max_players: null,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
+  const supabase = await createClient()
+  const { data: season } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('club_id', clubId)
+    .eq('is_active', true)
+    .single()
+
+  return season
 }
 
 interface PageProps {
@@ -65,15 +36,15 @@ interface PageProps {
 
 export default async function ClubRegistrationPage({ params }: PageProps) {
   const { club: clubSlug } = await params
-  
+
   const club = await getClub(clubSlug)
-  
+
   if (!club) {
     notFound()
   }
-  
+
   const season = await getCurrentSeason(club.id)
-  
+
   if (!season) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -89,20 +60,36 @@ export default async function ClubRegistrationPage({ params }: PageProps) {
       </div>
     )
   }
-  
+
+  // Check if user is logged in and has a draft
+  const user = await getUser()
+  let guardian = null
+  let draft = null
+  let guardianId: string | undefined
+
+  if (user) {
+    guardian = await getGuardianByUserId(user.id)
+    if (guardian) {
+      guardianId = guardian.id
+      draft = await getDraftRegistration(club.id, season.slug, user.id)
+    }
+  }
+
+  const isLoggedIn = !!user
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with club branding */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <a 
-            href={club.website_url || '#'} 
+          <a
+            href={club.website_url || '#'}
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
           >
             {club.logo_url ? (
               <img src={club.logo_url} alt={club.name} className="h-10 w-auto" />
             ) : (
-              <div 
+              <div
                 className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold"
                 style={{ backgroundColor: club.primary_color }}
               >
@@ -113,20 +100,59 @@ export default async function ClubRegistrationPage({ params }: PageProps) {
               {club.name}
             </span>
           </a>
-          <a
-            href={club.website_url || '#'}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            ← Back to {club.name.split(' ')[0]} website
-          </a>
+          <div className="flex items-center gap-4">
+            {isLoggedIn ? (
+              <span className="text-sm text-gray-600 flex items-center">
+                <User className="h-4 w-4 mr-1" />
+                {user.email}
+              </span>
+            ) : (
+              <Link
+                href={`/login?redirect=/${clubSlug}`}
+                className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
+              >
+                <LogIn className="h-4 w-4 mr-1" />
+                Sign in to save progress
+              </Link>
+            )}
+          </div>
         </div>
       </header>
-      
+
+      {/* Draft notice banner */}
+      {draft && (
+        <div className="bg-blue-50 border-b border-blue-200">
+          <div className="max-w-3xl mx-auto px-4 py-3">
+            <p className="text-sm text-blue-800">
+              <strong>Welcome back!</strong> We&apos;ve restored your saved progress.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="py-8 px-4">
-        <RegistrationWizard club={club} season={season} />
+        <RegistrationWizard
+          club={club}
+          season={season}
+          existingGuardian={draft?.guardian || (guardian ? {
+            first_name: guardian.first_name,
+            last_name: guardian.last_name,
+            email: guardian.email,
+            phone: guardian.phone || '',
+            address_line1: guardian.address_line1 || '',
+            address_line2: guardian.address_line2 || '',
+            city: guardian.city || '',
+            state: guardian.state || '',
+            postal_code: guardian.postal_code || '',
+          } : undefined)}
+          existingPlayers={draft?.players}
+          initialStep={draft?.currentStep || 0}
+          guardianId={guardianId}
+          isLoggedIn={isLoggedIn}
+        />
       </main>
-      
+
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 mt-auto">
         <div className="max-w-3xl mx-auto px-4 py-6 text-center text-sm text-gray-500">
@@ -136,8 +162,8 @@ export default async function ClubRegistrationPage({ params }: PageProps) {
           </p>
           <p className="mt-1">
             Questions? Contact{' '}
-            <a 
-              href={`mailto:${club.contact_email}`} 
+            <a
+              href={`mailto:${club.contact_email}`}
               className="text-primary-600 hover:underline"
             >
               {club.contact_email}

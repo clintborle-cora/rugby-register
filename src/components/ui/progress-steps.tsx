@@ -12,17 +12,21 @@ export interface Step {
 interface ProgressStepsProps {
   steps: Step[]
   currentStep: number
+  highestCompletedStep?: number // Tracks how far user has gotten
+  onStepClick?: (stepIndex: number) => void
   className?: string
 }
 
-export function ProgressSteps({ steps, currentStep, className }: ProgressStepsProps) {
+export function ProgressSteps({ steps, currentStep, highestCompletedStep = 0, onStepClick, className }: ProgressStepsProps) {
   return (
     <nav aria-label="Progress" className={className}>
       <ol className="flex items-center">
         {steps.map((step, index) => {
           const isComplete = index < currentStep
           const isCurrent = index === currentStep
-          
+          // Can click if: going backward OR step is within completed range
+          const isClickable = onStepClick && (index < currentStep || index <= highestCompletedStep)
+
           return (
             <li
               key={step.id}
@@ -45,18 +49,28 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                   />
                 </div>
               )}
-              
-              <div className="group relative flex items-start">
+
+              <button
+                type="button"
+                onClick={() => isClickable && onStepClick(index)}
+                disabled={!isClickable}
+                className={cn(
+                  'group relative flex items-start text-left',
+                  isClickable && 'cursor-pointer hover:opacity-80',
+                  !isClickable && 'cursor-default'
+                )}
+              >
                 {/* Circle */}
                 <span className="flex h-9 items-center" aria-hidden="true">
                   <span
                     className={cn(
-                      'relative z-10 flex h-8 w-8 items-center justify-center rounded-full',
+                      'relative z-10 flex h-8 w-8 items-center justify-center rounded-full transition-all',
                       isComplete
                         ? 'bg-primary-600'
                         : isCurrent
                         ? 'border-2 border-primary-600 bg-white'
-                        : 'border-2 border-gray-300 bg-white'
+                        : 'border-2 border-gray-300 bg-white',
+                      isClickable && !isCurrent && 'group-hover:ring-2 group-hover:ring-primary-200'
                     )}
                   >
                     {isComplete ? (
@@ -73,7 +87,7 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                     )}
                   </span>
                 </span>
-                
+
                 {/* Label */}
                 <span className="ml-4 flex min-w-0 flex-col">
                   <span
@@ -90,7 +104,7 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                     </span>
                   )}
                 </span>
-              </div>
+              </button>
             </li>
           )
         })}

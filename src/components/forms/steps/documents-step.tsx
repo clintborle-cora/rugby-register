@@ -1,10 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { HeadshotUpload, DocumentUpload } from '@/components/ui/file-upload'
 import type { PlayerFormData } from '@/lib/validations'
-import { ArrowLeft, ArrowRight, CheckCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 
 type PlayerWithMeta = PlayerFormData & {
   id: string
@@ -21,6 +22,8 @@ interface DocumentsStepProps {
 }
 
 export function DocumentsStep({ players, onUpdate, onNext, onBack }: DocumentsStepProps) {
+  const [skipDocuments, setSkipDocuments] = useState(false)
+
   const handleHeadshotSelect = (playerId: string, file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -58,7 +61,8 @@ export function DocumentsStep({ players, onUpdate, onNext, onBack }: DocumentsSt
   }
   
   const allDocumentsUploaded = players.every(p => p.headshot && p.dobDocument)
-  
+  const someDocumentsUploaded = players.some(p => p.headshot || p.dobDocument)
+
   return (
     <div className="space-y-6">
       <div>
@@ -67,6 +71,33 @@ export function DocumentsStep({ players, onUpdate, onNext, onBack }: DocumentsSt
           Upload a headshot photo and proof of date of birth for each player.
         </p>
       </div>
+
+      {/* Skip option for parents without documents ready */}
+      {!allDocumentsUploaded && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Clock className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-medium text-amber-900">Don&apos;t have documents handy?</h4>
+              <p className="text-sm text-amber-800 mt-1">
+                No problem! You can complete payment now and upload documents later.
+                We&apos;ll send you a reminder email with a link to upload them.
+              </p>
+              <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={skipDocuments}
+                  onChange={(e) => setSkipDocuments(e.target.checked)}
+                  className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="text-sm font-medium text-amber-900">
+                  Skip documents for now, I&apos;ll upload later
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="space-y-6">
         {players.map(player => {
@@ -133,12 +164,20 @@ export function DocumentsStep({ players, onUpdate, onNext, onBack }: DocumentsSt
         <Button
           type="button"
           onClick={onNext}
-          disabled={!allDocumentsUploaded}
+          disabled={!allDocumentsUploaded && !skipDocuments}
         >
-          Continue
+          {skipDocuments && !allDocumentsUploaded ? 'Skip & Continue' : 'Continue'}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+
+      {/* Warning if skipping */}
+      {skipDocuments && !allDocumentsUploaded && (
+        <p className="text-sm text-amber-700 text-center">
+          <AlertCircle className="inline h-4 w-4 mr-1" />
+          Documents must be uploaded within 48 hours to complete registration.
+        </p>
+      )}
     </div>
   )
 }

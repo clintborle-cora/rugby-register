@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { constructWebhookEvent } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/server'
+import { sendWelcomeEmail, type WelcomeEmailData } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   const body = await request.text()
@@ -57,11 +58,29 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Create payment record
+      // Gather data for welcome email
+      let guardianId: string | null = null
+      let clubData: any = null
+      const players: { name: string; division: string }[] = []
+      let totalAmountCents = 0
+      let documentsComplete = true
+
+      // Create payment record and gather email data
       for (const regId of registrationIds) {
         const { data: reg } = await supabase
           .from('registrations')
-          .select('*, club:clubs(*), player:players(guardian_id)')
+          .select(`
+            *,
+            club:clubs(*),
+            player:players(
+              id,
+              first_name,
+              last_name,
+              guardian_id,
+              headshot_url,
+              dob_document_url
+            )
+          `)
           .eq('id', regId)
           .single()
 
@@ -80,14 +99,72 @@ export async function POST(request: NextRequest) {
             usa_rugby_portion_cents: usaRugbyFee,
             platform_fee_cents: 0,
             stripe_payment_intent_id: session.payment_intent,
-            stripe_charge_id: session.payment_intent, // Will be updated
+            stripe_charge_id: session.payment_intent,
             status: 'succeeded',
           })
+
+          // Collect data for email
+          guardianId = reg.player.guardian_id
+          clubData = reg.club
+          players.push({
+            name: `${reg.player.first_name} ${reg.player.last_name}`,
+            division: reg.division,
+          })
+          totalAmountCents += reg.club.club_dues_cents + usaRugbyFee
+
+          // Check if documents are complete
+          if (!reg.player.headshot_url || !reg.player.dob_document_url) {
+            documentsComplete = false
+          }
         }
       }
 
-      // TODO: Send confirmation email
-      // TODO: Queue for external registration submission
+      // Send welcome email
+      if (guardianId && clubData) {
+        const { data: guardian } = await supabase
+          .from('guardians')
+          .select('*')
+          .eq('id', guardianId)
+          .single()
+
+        if (guardian) {
+          try {
+            const emailData: WelcomeEmailData = {
+              guardianName: `${guardian.first_name} ${guardian.last_name}`,
+              guardianEmail: guardian.email,
+              clubName: clubData.name,
+              clubEmail: clubData.contact_email,
+              players,
+              totalPaid: `$${(totalAmountCents / 100).toFixed(2)}`,
+              practiceLocation: clubData.settings?.practice_location,
+              practiceSchedule: clubData.settings?.practice_schedule,
+              documentsComplete,
+              documentsUploadUrl: !documentsComplete
+                ? `${process.env.NEXT_PUBLIC_APP_URL}/${clubData.slug}/documents/${registrationIds[0]}`
+                : undefined,
+            }
+
+            await sendWelcomeEmail(emailData)
+            console.log('Welcome email sent to:', guardian.email)
+
+            // Log the email
+            await supabase.from('email_log').insert({
+              recipient_email: guardian.email,
+              email_type: 'registration_confirmation',
+              subject: `Welcome to ${clubData.name}! Registration Confirmed`,
+              registration_id: registrationIds[0],
+              guardian_id: guardianId,
+              club_id: clubData.id,
+              sent_at: new Date().toISOString(),
+              delivered: true,
+              template_data: emailData as any,
+            })
+          } catch (emailError) {
+            console.error('Failed to send welcome email:', emailError)
+            // Don't fail the webhook if email fails
+          }
+        }
+      }
 
       console.log('Payment successful for registrations:', registrationIds)
       break
