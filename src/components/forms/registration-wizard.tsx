@@ -1,4 +1,4 @@
-cat > src/components/forms/registration-wizard.tsx << 'ENDOFFILE'
+
 'use client'
 
 import { useState, useCallback } from 'react'
@@ -220,4 +220,3 @@ export function RegistrationWizard({ club, season, existingGuardian }: Registrat
     </div>
   )
 }
-ENDOFFILE

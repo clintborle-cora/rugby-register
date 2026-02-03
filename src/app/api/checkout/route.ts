@@ -1,4 +1,4 @@
-cat > src/app/api/checkout/route.ts << 'ENDOFFILE'
+
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
@@ -48,4 +48,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-ENDOFFILE

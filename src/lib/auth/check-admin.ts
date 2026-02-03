@@ -62,7 +62,7 @@ export async function requireAdmin(clubSlug: string): Promise<AdminUser> {
 }
 
 // Check if admin has specific permission
-export function hasPermission(
+export async function hasPermission(
   admin: AdminUser,
   permission: keyof AdminUser['permissions']
 ): boolean {
