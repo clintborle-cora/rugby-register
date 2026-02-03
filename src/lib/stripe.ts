@@ -1,13 +1,23 @@
 import Stripe from 'stripe'
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set')
+// Initialize Stripe lazily to allow build without keys
+let stripeInstance: Stripe | null = null
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set')
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-12-18.acacia',
+      typescript: true,
+    })
+  }
+  return stripeInstance
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
-  typescript: true,
-})
+// Export getStripe for direct Stripe access
+export { getStripe }
 
 // Helper to create a checkout session for registration payment
 export async function createCheckoutSession({
@@ -27,7 +37,7 @@ export async function createCheckoutSession({
   cancelUrl: string
   metadata?: Record<string, string>
 }) {
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripe().checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
       {
@@ -60,5 +70,5 @@ export function constructWebhookEvent(
   signature: string,
   webhookSecret: string
 ) {
-  return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  return getStripe().webhooks.constructEvent(payload, signature, webhookSecret)
 }

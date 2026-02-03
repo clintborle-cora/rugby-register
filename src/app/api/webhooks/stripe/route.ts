@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { constructWebhookEvent, stripe } from '@/lib/stripe'
+import { constructWebhookEvent } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
