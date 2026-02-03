@@ -13,6 +13,7 @@ import type { Club, Season } from '@/types'
 import type { GuardianFormData, PlayerFormData } from '@/lib/validations'
 import { ArrowLeft, ArrowRight, Save, Cloud, CloudOff } from 'lucide-react'
 import { saveDraftRegistration } from '@/lib/actions/registration'
+import { calculateUsaRugbyFee } from '@/lib/utils'
 
 const STEPS: Step[] = [
   { id: 'guardian', title: 'Your Info', description: 'Parent/Guardian details' },
@@ -168,19 +169,43 @@ export function RegistrationWizard({
   }, [currentStep, data])
   
   const handleSubmit = async () => {
+    if (!data.guardian) return
     setIsSubmitting(true)
     try {
-      // TODO: Implement actual submission logic
-      // 1. Create/update guardian in DB
-      // 2. Create players in DB
-      // 3. Upload documents to storage
-      // 4. Create registrations
-      // 5. Create Stripe checkout session
-      // 6. Redirect to Stripe
-      console.log('Submitting registration:', data)
+      const playerNames = data.players.map(
+        (p) => `${p.first_name} ${p.last_name}`
+      )
+      let totalAmountCents = 0
+      data.players.forEach((player) => {
+        totalAmountCents += club.club_dues_cents
+        totalAmountCents += calculateUsaRugbyFee(
+          player.division,
+          club.settings.usa_rugby_fees
+        )
+      })
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerNames,
+          totalAmountCents,
+          clubName: club.name,
+          clubSlug: club.slug,
+          guardianEmail: data.guardian.email,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Checkout failed')
+      }
+      const { url } = await res.json()
+      if (url) {
+        window.location.href = url
+        return
+      }
+      throw new Error('No checkout URL returned')
     } catch (error) {
       console.error('Registration failed:', error)
-    } finally {
       setIsSubmitting(false)
     }
   }

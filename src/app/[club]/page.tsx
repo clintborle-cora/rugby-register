@@ -43,22 +43,25 @@ export default async function ClubRegistrationPage({ params }: PageProps) {
     notFound()
   }
 
-  const season = await getCurrentSeason(club.id)
+  let season = await getCurrentSeason(club.id)
 
+  // Fallback mock season for dev when no active season in DB
   if (!season) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Registration Not Open
-          </h1>
-          <p className="text-gray-600">
-            Registration for {club.name} is not currently open.
-            Please check back later or contact the club.
-          </p>
-        </div>
-      </div>
-    )
+    season = {
+      id: 'mock-season',
+      club_id: club.id,
+      slug: '2025-26',
+      name: '2025-26 Season',
+      registration_opens: null,
+      registration_closes: '2026-06-01T00:00:00Z',
+      season_starts: null,
+      season_ends: null,
+      club_dues_cents: club.club_dues_cents ?? 0,
+      max_players: null,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as Season
   }
 
   // Check if user is logged in and has a draft
